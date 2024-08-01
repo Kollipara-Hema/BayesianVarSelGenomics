@@ -1,7 +1,7 @@
-if(TRUE){args=(commandArgs(TRUE))
-for(i in 1:length(args)){eval(parse(text=args[[i]]))}}else{
-  jobID=1
-}
+# if(TRUE){args=(commandArgs(TRUE))
+# for(i in 1:length(args)){eval(parse(text=args[[i]]))}}else{
+#   jobID=1
+# }
 
 ### libraries required
 require(MASS)
@@ -47,7 +47,9 @@ confusion_measure<-function(beta,B){
 }
 #set.seed(123)
 
-fn_iteration<-function(iterr){
+fn_iteration<-function(Sim){
+  
+  for(iterr in 1:Sim){
   set.seed(iterr)
   
   
@@ -227,7 +229,7 @@ fn_iteration<-function(iterr){
   SSE11<-sum((beta-final_lasso_coef)^2)/p
   MSPE11<-sum((X_scale%*%final_lasso_coef-Y_scale)^2)/(n)
   MSPE11out<-sum((outX_scale%*%final_lasso_coef-outY_scale)^2)/(outn)
-  out11<-list(runtime=runtime11,confusion_measure(final_lasso_coef,beta),SSE=SSE11,MSPE=MSPE11,,MSPEout=MSPE11out)
+  out11<-list(runtime=runtime11,confusion_measure(final_lasso_coef, beta),SSE=SSE11,MSPE=MSPE11,MSPEout=MSPE11out)
   
   
   #### random forest
@@ -258,7 +260,7 @@ fn_iteration<-function(iterr){
   SSE12<-sum((beta-final_rf_coef)^2)/p
   MSPE12<-sum((X_scale%*%final_rf_coef-Y_scale)^2)/(n)
   MSPE12out<-sum((outX_scale%*%final_rf_coef-outY_scale)^2)/(outn)
-  out12<-list(runtime=runtime12,confusion_measure(final_rf_coef,beta),SSE=SSE12,MSPE=MSPE12,,MSPEout=MSPE12out)
+  out12<-list(runtime=runtime12,confusion_measure(final_rf_coef,beta),SSE=SSE12,MSPE=MSPE12,MSPEout=MSPE12out)
   
   ####selection by partial correlation
   start_time <- Sys.time()
@@ -294,7 +296,8 @@ fn_iteration<-function(iterr){
                                       c(final_lasso_coef),c(final_rf_coef),c(final_rf_coef.pc),c(lasso_model_optimal$beta[,1]),c(eln_model_optimal$beta[,1])))
   colnames(beta_estimates)<-c("SL","HS","HSP","SN","blasso","RHS","SUSIE","STEP","RF","RFPC","lasso","EL")
   write.csv(beta_estimates,paste("beta_estimates_",Sim,"_SNR_",SNR,"_p_",p,"_spars_",spars,".csv",sep=""))
+  }
 }
 
-ans = fn_iteration(jobID)
+ans = fn_iteration(1)
 ans
