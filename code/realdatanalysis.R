@@ -9,6 +9,7 @@ library(SSLASSO)
 library(UCSCXenaTools)
 library(bayesreg)
 library(horseshoe)
+require(randomForest)
 MSEY<-function(Y,X,B){print(sum((Y-X%*%B)^2)/nrow(Y))}
 MSEB<-function(beta,B){print(sum((beta-B)^2))}
 
@@ -83,6 +84,9 @@ sum((X_scale%*%ssL1$beta[,1]-Y_scale)^2)/n
 sum(ssL1$beta[,1]!=0)
 sum(round(ssL1$beta[,1],2)!=0)
 MSEY(Y_scale,X_scale,ssL1$beta[,1])
+
+##SUSIE
+
 # install.packages("remotes")
 #remotes::install_github("stephenslab/susieR")
 library(susieR)
@@ -135,8 +139,8 @@ set.seed(143)
 start_time <- Sys.time()
 prior_ssN1<-SpikeSlabPrior(x=X_scale,y=Y_scale, expected.model.size=100,   # eX_scalepect 100 nonzero predictors          
                            diagonal.shrinkage = 0.5,   # use Zellner's prior
-                           # shrink to zero)
-)
+                           prior.df = spars)# shrink to zero)
+#)
 ## default prior
 ## 
 ssN1 <- lm.spike(Y_scale ~ X_scale - 1, niter = 10000,#prior=prior_ssN1,
@@ -175,10 +179,63 @@ sigma(fit4)
 RHS1<-round(fit4$coefficients,2)
 RHS1[which(RHS1!=0)]
 
+ ### step 
+ est.lasso=as.numeric(coef(lasso_model_optimal))[-1]
+ mydata.lasso=data.frame(X_scale[,which(est.lasso!=0)], Y_scale)
+ names(mydata.lasso)<-c(which(est.lasso!=0), "response")
+ start_time <- Sys.time()
+ #null.lasso=lm(response~1, data=mydata.lasso)
+ full.lasso=lm(response~., data=mydata.lasso)
+ #final.lasso <- step(null.lasso, score=list(lower=null.lasso, upper=full.lasso),direction="forward", k=log(n), trace=0)
+ final.lasso <- step(full.lasso, k=log(n), trace=0)# using the BIC criteria
+ end_time <- Sys.time()
+runtime11=difftime(end_time, start_time, units="secs")
+runtime11
+sig.genes.l=noquote(noquote(names(final.lasso$coefficients[-1])))
+sig.genes.l=as.numeric(gsub("`", "",sig.genes.l))
+final_lasso_coef<-numeric(p)
+final_lasso_coef[sig.genes.l] <- as.numeric(final.lasso$coefficients[-1])
+sum((final_lasso_coef)!=0)
+sum(round(final_lasso_coef,2)!=0)
+sum((X_scale%*%final_lasso_coef-Y_scale)^2)/(n)
+
+
+#### random forest
+## Two-step procedure: randomforest to screen a set of features
+## and then apply the stepwise variable selection technique
+## using the BIC criteria
+## Step one
+start_time <- Sys.time()
+mydata=data.frame(Y_scale, X_scale)
+outrf=randomForest(Y_scale~., ntree=500, data=mydata)
+impoutrf=importance(outrf)
+impvariables=sort(impoutrf, index.return=T, decreasing=TRUE)$ix
+mythreshold=min((n-2), ceiling(0.1*p)) # to screen out important variables
+selectedvariablerf=impvariables[1:mythreshold]
+
+## Step two
+mydata.rf=data.frame(X_scale[,selectedvariablerf], Y_scale)
+names(mydata.rf)<-c(selectedvariablerf, "response")
+full.rf=lm(response~., data=mydata.rf)
+final.rf <- step(full.rf, k=log(n), trace=0)# using the BIC criteria
+end_time <- Sys.time()
+runtime12=difftime(end_time, start_time, units="secs")
+runtime12
+summary(final.rf)
+sig.genes.rf=noquote(noquote(names(final.rf$coefficients[-1])))
+sig.genes.rf=as.numeric(gsub("`", "",sig.genes.rf))
+final_rf_coef<-numeric(p)
+final_rf_coef[sig.genes.rf] <- as.numeric(final.rf$coefficients[-1])
+sum((final_rf_coef)!=0)
+sum(round(final_rf_coef,2)!=0)
+sum((X_scale%*%final_rf_coef-Y_scale)^2)/(n)
+
+
+
 beta_estimates<-data.frame(c(colMeans(model_bl1$beta)),c(ssL1$beta[,ncol(ssL1$beta)]),c(ssL1$beta[,1]),
                            c(susie_get_posterior_mean(res1)),c(model1$BetaHat),c(hsp$mu.beta),c(colMeans(ssN1$beta)),
-                           c(fit4$coefficients),lasso_model_optimal$beta[,1],eln_model_optimal$beta[,1])
-colnames(beta_estimates)<-c("BL","SSL","SSL1","Susie","hs","hsp","SSN","rhs","lasso","el")
+                           c(fit4$coefficients),lasso_model_optimal$beta[,1],eln_model_optimal$beta[,1],c(final_lasso_coef),c(final_rf_coef))
+colnames(beta_estimates)<-c("BL","SSL","SSL1","Susie","hs","hsp","SSN","rhs","lasso","el","STEP","RF")
 row.names(beta_estimates)<-colnames(X_scale)
 write.csv(beta_estimates,"MET_tumor_female.csv")
 MF<-beta_estimates
